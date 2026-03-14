@@ -18,6 +18,7 @@ ctx_chat_id: ContextVar[int | None] = ContextVar("ctx_chat_id", default=None)
 ctx_topic: ContextVar[str | None] = ContextVar("ctx_topic", default=None)
 ctx_session_id: ContextVar[str | None] = ContextVar("ctx_session_id", default=None)
 ctx_operation: ContextVar[str | None] = ContextVar("ctx_operation", default=None)
+ctx_principal_id: ContextVar[str | None] = ContextVar("ctx_principal_id", default=None)
 
 
 class ContextFilter(logging.Filter):
@@ -29,6 +30,7 @@ class ContextFilter(logging.Filter):
         topic = ctx_topic.get(None)
         sid = ctx_session_id.get(None)
         op = ctx_operation.get(None)
+        principal = ctx_principal_id.get(None)
         parts: list[str] = []
         if agent:
             parts.append(agent)
@@ -40,17 +42,20 @@ class ContextFilter(logging.Filter):
             parts.append(topic)
         if sid:
             parts.append(sid[:8])
+        if principal:
+            parts.append(principal)
         record.ctx = f"[{':'.join(parts)}] " if parts else ""
         return True
 
 
-def set_log_context(
+def set_log_context(  # noqa: PLR0913
     *,
     agent_name: str | None = None,
     operation: str | None = None,
     chat_id: int | None = None,
     topic: str | None = None,
     session_id: str | None = None,
+    principal_id: str | None = None,
 ) -> None:
     """Set logging context for the current asyncio task.
 
@@ -67,3 +72,5 @@ def set_log_context(
         ctx_topic.set(topic)
     if session_id is not None:
         ctx_session_id.set(session_id)
+    if principal_id is not None:
+        ctx_principal_id.set(principal_id)

@@ -21,6 +21,7 @@ from ductor_bot.config import AgentConfig
 from ductor_bot.files.allowed_roots import resolve_allowed_roots
 from ductor_bot.i18n import t
 from ductor_bot.infra.version import get_current_version
+from ductor_bot.log_context import ctx_principal_id
 from ductor_bot.messenger.commands import classify_command
 from ductor_bot.messenger.matrix.buttons import ButtonTracker
 from ductor_bot.messenger.matrix.credentials import login_or_restore
@@ -298,6 +299,8 @@ class MatrixBot:
         if not self._should_process_event(room, event, event.sender):
             return
 
+        ctx_principal_id.set(f"mx:{event.sender}")
+
         text = event.body.strip()
         if not text:
             return
@@ -346,6 +349,8 @@ class MatrixBot:
 
         if not self._should_process_event(room, event, event.sender):
             return
+
+        ctx_principal_id.set(f"mx:{event.sender}")
 
         # Group mention-only filter: in group rooms, only process if addressed
         is_group_room = not self._is_dm_room(room)

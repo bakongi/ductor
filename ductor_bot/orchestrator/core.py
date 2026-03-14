@@ -8,6 +8,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ductor_bot.auth.audit import AuditLog
+from ductor_bot.auth.principal import Principal
+from ductor_bot.auth.roles import Cap
+from ductor_bot.auth.service import AuthorizationService
 from ductor_bot.background import (
     BackgroundSubmit,
     BackgroundTask,
@@ -26,6 +30,7 @@ from ductor_bot.errors import (
 )
 from ductor_bot.infra.docker import DockerManager
 from ductor_bot.infra.inflight import InflightTracker
+from ductor_bot.log_context import ctx_principal_id
 from ductor_bot.orchestrator.commands import (
     cmd_cron,
     cmd_diagnose,
@@ -99,6 +104,7 @@ class _MessageDispatch:
     on_text_delta: _TextCallback | None = None
     on_tool_activity: _TextCallback | None = None
     on_system_status: _SystemStatusCallback | None = None
+    principal_id: str = ""
 
     def streaming_callbacks(self) -> StreamingCallbacks:
         """Bundle the streaming callbacks into a StreamingCallbacks instance."""
@@ -179,7 +185,9 @@ class Orchestrator:
         self._hook_registry.register(DELEGATION_REMINDER)
         self._supervisor: AgentSupervisor | None = None  # Set by AgentSupervisor after creation
         self._task_hub: TaskHub | None = None  # Set by supervisor or __main__.py
-        self._command_registry = CommandRegistry()
+        self._authz = AuthorizationService(config)
+        self._audit_log = AuditLog(paths.audit_log_path)
+        self._command_registry = CommandRegistry(authz=self._authz, audit_log=self._audit_log)
         self._register_commands()
 
     @property
@@ -273,7 +281,8 @@ class Orchestrator:
 
     async def handle_message(self, key: SessionKey, text: str) -> OrchestratorResult:
         """Main entry point: route message to appropriate handler."""
-        dispatch = _MessageDispatch(key=key, text=text, cmd=text.strip().lower())
+        pid = ctx_principal_id.get(None) or ""
+        dispatch = _MessageDispatch(key=key, text=text, cmd=text.strip().lower(), principal_id=pid)
         return await self._handle_message_impl(dispatch)
 
     async def handle_message_streaming(
@@ -286,6 +295,7 @@ class Orchestrator:
         on_system_status: _SystemStatusCallback | None = None,
     ) -> OrchestratorResult:
         """Main entry point with streaming support."""
+        pid = ctx_principal_id.get(None) or ""
         dispatch = _MessageDispatch(
             key=key,
             text=text,
@@ -294,12 +304,25 @@ class Orchestrator:
             on_text_delta=on_text_delta,
             on_tool_activity=on_tool_activity,
             on_system_status=on_system_status,
+            principal_id=pid,
         )
         return await self._handle_message_impl(dispatch)
 
     async def _handle_message_impl(self, dispatch: _MessageDispatch) -> OrchestratorResult:
         self._process_registry.clear_abort(dispatch.key.chat_id)
         logger.info("Message received text=%s", dispatch.cmd[:80])
+
+        # Rate limiting
+        if dispatch.principal_id:
+            principal = Principal.parse(dispatch.principal_id)
+            if not self._authz.check_rate_limit(principal):
+                self._audit_log.log(
+                    principal=dispatch.principal_id,
+                    action="rate_limited",
+                    target=dispatch.cmd[:80],
+                    result="denied",
+                )
+                return OrchestratorResult(text="Rate limit exceeded. Please wait a moment.")
 
         patterns = detect_suspicious_patterns(dispatch.text)
         if patterns:
@@ -317,11 +340,13 @@ class Orchestrator:
             return OrchestratorResult(text="An internal error occurred. Please try again.")
 
     async def _route_message(self, dispatch: _MessageDispatch) -> OrchestratorResult:
+        principal = Principal.parse(dispatch.principal_id) if dispatch.principal_id else None
         result = await self._command_registry.dispatch(
             dispatch.cmd,
             self,
             dispatch.key,
             dispatch.text,
+            principal=principal,
         )
         if result is not None:
             return result
@@ -376,14 +401,14 @@ class Orchestrator:
         # /stop is handled entirely by the Middleware abort path (before the lock)
         # and never reaches the orchestrator command registry.
         reg.register_async("/status", cmd_status)
-        reg.register_async("/model", cmd_model)
-        reg.register_async("/model ", cmd_model)
+        reg.register_async("/model", cmd_model, capability=Cap.MODEL_SELECT)
+        reg.register_async("/model ", cmd_model, capability=Cap.MODEL_SELECT)
         reg.register_async("/memory", cmd_memory)
-        reg.register_async("/cron", cmd_cron)
-        reg.register_async("/diagnose", cmd_diagnose)
-        reg.register_async("/upgrade", cmd_upgrade)
-        reg.register_async("/sessions", cmd_sessions)
-        reg.register_async("/tasks", cmd_tasks)
+        reg.register_async("/cron", cmd_cron, capability=Cap.CRON_MANAGE)
+        reg.register_async("/diagnose", cmd_diagnose, capability=Cap.SYSTEM_DIAGNOSE)
+        reg.register_async("/upgrade", cmd_upgrade, capability=Cap.CONFIG_MANAGE)
+        reg.register_async("/sessions", cmd_sessions, capability=Cap.SESSION_MANAGE)
+        reg.register_async("/tasks", cmd_tasks, capability=Cap.TASKS_MANAGE)
 
     def register_multiagent_commands(self) -> None:
         """Register /agents, /agent_start, /agent_stop, /agent_restart commands.
@@ -398,13 +423,13 @@ class Orchestrator:
         )
 
         reg = self._command_registry
-        reg.register_async("/agents", cmd_agents)
-        reg.register_async("/agent_start", cmd_agent_start)
-        reg.register_async("/agent_start ", cmd_agent_start)
-        reg.register_async("/agent_stop", cmd_agent_stop)
-        reg.register_async("/agent_stop ", cmd_agent_stop)
-        reg.register_async("/agent_restart", cmd_agent_restart)
-        reg.register_async("/agent_restart ", cmd_agent_restart)
+        reg.register_async("/agents", cmd_agents, capability=Cap.AGENTS_MANAGE)
+        reg.register_async("/agent_start", cmd_agent_start, capability=Cap.AGENTS_MANAGE)
+        reg.register_async("/agent_start ", cmd_agent_start, capability=Cap.AGENTS_MANAGE)
+        reg.register_async("/agent_stop", cmd_agent_stop, capability=Cap.AGENTS_MANAGE)
+        reg.register_async("/agent_stop ", cmd_agent_stop, capability=Cap.AGENTS_MANAGE)
+        reg.register_async("/agent_restart", cmd_agent_restart, capability=Cap.AGENTS_MANAGE)
+        reg.register_async("/agent_restart ", cmd_agent_restart, capability=Cap.AGENTS_MANAGE)
         logger.info("Multi-agent commands registered")
 
     async def reset_session(self, key: SessionKey) -> None:
@@ -655,6 +680,9 @@ class Orchestrator:
                 task = asyncio.create_task(hb.stop())
                 task.add_done_callback(lambda _: None)
                 logger.info("Heartbeat observer stopped via hot-reload")
+
+        if any(k in hot for k in ("admin_ids", "rate_limit_per_minute")):
+            self._authz.update_from_config(config)
 
         handler = getattr(self, "_config_hot_reload_handler", None)
         if handler is not None:

@@ -45,6 +45,7 @@ def test_envelope_defaults() -> None:
     assert env.thread_id is None
     assert env.envelope_id == ""
     assert env.elapsed_seconds == 0.0
+    assert env.principal_id == ""
     assert env.provider == ""
     assert env.model == ""
     assert env.session_name == ""
@@ -72,3 +73,8 @@ def test_envelope_metadata_independent() -> None:
     b = Envelope(origin=Origin.CRON, chat_id=2)
     a.metadata["key"] = "value"
     assert "key" not in b.metadata
+
+
+def test_envelope_principal_id() -> None:
+    env = Envelope(origin=Origin.USER, chat_id=1, principal_id="tg:123")
+    assert env.principal_id == "tg:123"

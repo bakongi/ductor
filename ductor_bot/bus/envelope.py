@@ -78,6 +78,9 @@ class Envelope:
     created_at: float = field(default_factory=time.time)
     elapsed_seconds: float = 0.0
 
+    # -- Principal identity --
+    principal_id: str = ""
+
     # -- Provider context --
     provider: str = ""
     model: str = ""

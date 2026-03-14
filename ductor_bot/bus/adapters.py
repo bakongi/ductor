@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ductor_bot.bus.envelope import DeliveryMode, Envelope, LockMode, Origin
+from ductor_bot.log_context import ctx_principal_id
 
 if TYPE_CHECKING:
     from ductor_bot.background.models import BackgroundResult
@@ -300,4 +301,5 @@ def from_user_message(
         prompt_preview=text[:80] if text else "",
         delivery=DeliveryMode.UNICAST,
         lock_mode=LockMode.NONE,
+        principal_id=ctx_principal_id.get(None) or "",
     )

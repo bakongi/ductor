@@ -53,7 +53,7 @@ from ductor_bot.files.tags import (
     is_image_path,
     path_from_file_tag,
 )
-from ductor_bot.log_context import set_log_context
+from ductor_bot.log_context import ctx_principal_id, set_log_context
 from ductor_bot.security.paths import is_path_safe
 from ductor_bot.session.key import SessionKey
 from ductor_bot.text.response_format import normalize_tool_name
@@ -492,6 +492,7 @@ class ApiServer:
     ) -> None:
         """Read encrypted messages from the client and dispatch them sequentially."""
         lock = self._lock_pool.get(key.lock_key)
+        ctx_principal_id.set("api:ws-client")
         set_log_context(operation="api", chat_id=key.chat_id)
 
         async for raw in channel.ws:

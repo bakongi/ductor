@@ -21,7 +21,7 @@ from aiogram.types import (
 )
 
 from ductor_bot.bus.lock_pool import LockPool
-from ductor_bot.log_context import set_log_context
+from ductor_bot.log_context import ctx_principal_id, set_log_context
 from ductor_bot.messenger.telegram.abort import (
     is_abort_all_message,
     is_abort_message,
@@ -140,6 +140,7 @@ class AuthMiddleware(BaseMiddleware):
         elif user.id not in self._allowed_users:
             return None
 
+        ctx_principal_id.set(f"tg:{user.id}")
         return await handler(event, data)
 
 

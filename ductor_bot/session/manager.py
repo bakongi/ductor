@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ductor_bot.config import AgentConfig, resolve_user_timezone
 from ductor_bot.infra.json_store import atomic_json_save, load_json
+from ductor_bot.log_context import ctx_principal_id
 from ductor_bot.session.key import SessionKey
 
 logger = logging.getLogger(__name__)
@@ -96,7 +97,10 @@ class SessionData:
     model: str
     created_at: str
     last_active: str
+    owner_id: str
+    scope: str
     provider_sessions: dict[str, ProviderSessionData] = field(default_factory=dict)
+    cost_by_principal: dict[str, float] = field(default_factory=dict)
 
     def __init__(self, chat_id: int, **raw: object) -> None:
         """Create session data from current or legacy serialized fields."""
@@ -108,6 +112,9 @@ class SessionData:
         created_at = _as_str(raw.pop("created_at", ""), default="")
         last_active = _as_str(raw.pop("last_active", ""), default="")
         provider_sessions = _as_mapping(raw.pop("provider_sessions", None))
+        owner_id = _as_str(raw.pop("owner_id", ""), default="")
+        scope = _as_str(raw.pop("scope", ""), default="")
+        cost_by_principal_raw = raw.pop("cost_by_principal", None)
 
         # Backward compatibility for old JSON/tests.
         session_id = _as_optional_str(raw.pop("session_id", None))
@@ -121,10 +128,20 @@ class SessionData:
         self.topic_name = topic_name
         self.provider = provider
         self.model = model
+        self.owner_id = owner_id
+        self.scope = scope or "shared"
 
         now = datetime.now(UTC).isoformat()
         self.created_at = created_at or now
         self.last_active = last_active or now
+
+        # Coerce cost_by_principal from JSON
+        if isinstance(cost_by_principal_raw, dict):
+            self.cost_by_principal = {
+                str(k): float(v) for k, v in cost_by_principal_raw.items() if v is not None
+            }
+        else:
+            self.cost_by_principal = {}
 
         migrated = self._coerce_provider_sessions(provider_sessions)
         has_legacy_fields = any(
@@ -327,6 +344,10 @@ class SessionManager:
         if key.topic_id is not None and self._topic_name_resolver is not None:
             topic_name = self._topic_name_resolver(key.chat_id, key.topic_id)
 
+        # Determine owner and scope for new session
+        owner = ctx_principal_id.get(None) or ""
+        scope = "private" if (key.transport == "tg" and key.chat_id > 0) else "shared"
+
         new = SessionData(
             chat_id=key.chat_id,
             transport=key.transport,
@@ -334,6 +355,8 @@ class SessionManager:
             topic_name=topic_name,
             provider=prov,
             model=model_name,
+            owner_id=owner,
+            scope=scope,
             provider_sessions={},
         )
         sessions[skey] = new
@@ -439,6 +462,15 @@ class SessionManager:
             current.message_count += 1
             current.total_cost_usd += cost_usd
             current.total_tokens += tokens
+
+            # Per-principal cost tracking
+            if cost_usd > 0:
+                pid = ctx_principal_id.get(None) or ""
+                if pid:
+                    current.cost_by_principal[pid] = (
+                        current.cost_by_principal.get(pid, 0.0) + cost_usd
+                    )
+
             sessions[key] = current
             await self._save(sessions)
 

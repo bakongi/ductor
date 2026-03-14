@@ -230,6 +230,9 @@ async def test_session_data_defaults() -> None:
     assert s.message_count == 0
     assert s.total_cost_usd == 0.0
     assert s.total_tokens == 0
+    assert s.owner_id == ""
+    assert s.scope == "shared"
+    assert s.cost_by_principal == {}
 
 
 async def test_model_update_without_provider_switch(tmp_path: Path) -> None:
@@ -440,3 +443,56 @@ async def test_list_active_for_chat_excludes_stale(tmp_path: Path) -> None:
     with time_machine.travel("2099-01-01 00:00:00", tick=False):
         result = await mgr.list_active_for_chat(-100)
         assert len(result) == 0
+
+
+# -- owner_id, scope, cost_by_principal ----------------------------------------
+
+
+async def test_new_session_gets_scope_private_for_positive_chat_id(tmp_path: Path) -> None:
+    from ductor_bot.log_context import ctx_principal_id
+
+    mgr = _make_manager(tmp_path)
+    ctx_principal_id.set("tg:123")
+    try:
+        s, _ = await mgr.resolve_session(key=SessionKey(chat_id=123))
+        assert s.owner_id == "tg:123"
+        assert s.scope == "private"
+    finally:
+        ctx_principal_id.set(None)
+
+
+async def test_new_session_gets_scope_shared_for_negative_chat_id(tmp_path: Path) -> None:
+    mgr = _make_manager(tmp_path)
+    s, _ = await mgr.resolve_session(key=SessionKey(chat_id=-100))
+    assert s.scope == "shared"
+
+
+async def test_backward_compat_missing_owner_scope(tmp_path: Path) -> None:
+    """Old JSON without owner_id/scope loads cleanly."""
+    path = tmp_path / "sessions.json"
+    path.write_text(
+        '{"tg:1":{"chat_id":1,"provider":"claude","model":"opus"}}',
+        encoding="utf-8",
+    )
+    mgr = _make_manager(tmp_path)
+    s = await mgr.get_active(SessionKey(chat_id=1))
+    assert s is not None
+    assert s.owner_id == ""
+    assert s.scope == "shared"
+
+
+async def test_cost_by_principal_tracking(tmp_path: Path) -> None:
+    from ductor_bot.log_context import ctx_principal_id
+
+    mgr = _make_manager(tmp_path)
+    s, _ = await mgr.resolve_session(key=SessionKey(chat_id=1))
+    ctx_principal_id.set("tg:100")
+    try:
+        await mgr.update_session(s, cost_usd=0.05, tokens=100)
+        await mgr.update_session(s, cost_usd=0.03, tokens=50)
+    finally:
+        ctx_principal_id.set(None)
+
+    reloaded = await mgr.get_active(SessionKey(chat_id=1))
+    assert reloaded is not None
+    assert reloaded.cost_by_principal.get("tg:100") == pytest.approx(0.08)

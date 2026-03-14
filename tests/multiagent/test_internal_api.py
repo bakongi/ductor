@@ -256,3 +256,46 @@ class TestLifecycle:
             started = await api.start()
 
         assert started is False
+
+
+class TestDockerAuth:
+    """Test Docker-mode token auth on InternalAgentAPI."""
+
+    @pytest.fixture
+    def docker_api(self, bus: InterAgentBus) -> InternalAgentAPI:
+        return InternalAgentAPI(bus, port=0, docker_mode=True, token="secret-token")
+
+    @pytest.fixture
+    async def docker_client(self, docker_api: InternalAgentAPI) -> TestClient:
+        from aiohttp.test_utils import TestServer
+
+        server = TestServer(docker_api._app)
+        c = TestClient(server)
+        await c.start_server()
+        yield c
+        await c.close()
+
+    async def test_no_token_returns_401(self, docker_client: TestClient) -> None:
+        resp = await docker_client.get("/interagent/health")
+        assert resp.status == 401
+        data = await resp.json()
+        assert data["error"] == "Unauthorized"
+
+    async def test_wrong_token_returns_401(self, docker_client: TestClient) -> None:
+        resp = await docker_client.get(
+            "/interagent/health",
+            headers={"Authorization": "Bearer wrong-token"},
+        )
+        assert resp.status == 401
+
+    async def test_correct_token_succeeds(self, docker_client: TestClient) -> None:
+        resp = await docker_client.get(
+            "/interagent/health",
+            headers={"Authorization": "Bearer secret-token"},
+        )
+        assert resp.status == 200
+
+    async def test_localhost_api_no_auth_needed(self, client: TestClient) -> None:
+        """Localhost-bound API (no docker_mode) does not require token."""
+        resp = await client.get("/interagent/health")
+        assert resp.status == 200

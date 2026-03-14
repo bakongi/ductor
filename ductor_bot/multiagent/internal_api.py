@@ -12,6 +12,7 @@ The server also starts in **task-only mode** (no multi-agent bus) when
 
 from __future__ import annotations
 
+import hmac
 import logging
 from dataclasses import asdict
 from typing import TYPE_CHECKING
@@ -38,6 +39,10 @@ class InternalAgentAPI:
 
     The *bus* parameter is optional: when ``None`` only task endpoints are
     registered (task-only mode for single-agent setups).
+
+    When *token* is set and the server binds to ``0.0.0.0``, every request
+    must carry ``Authorization: Bearer <token>``.  Localhost-only binding
+    bypasses the token check.
     """
 
     def __init__(
@@ -46,10 +51,12 @@ class InternalAgentAPI:
         port: int = _DEFAULT_PORT,
         *,
         docker_mode: bool = False,
+        token: str = "",
     ) -> None:
         self._bus = bus
         self._port = port
         self._bind_host = _BIND_ALL_HOST if docker_mode else "127.0.0.1"
+        self._token = token
         self._health_ref: dict[str, AgentHealth] | None = None
         self._task_hub: TaskHub | None = None
         self._app = web.Application()
@@ -78,6 +85,22 @@ class InternalAgentAPI:
     def set_task_hub(self, hub: TaskHub) -> None:
         """Set the TaskHub for handling /tasks/* endpoints."""
         self._task_hub = hub
+
+    def _check_auth(self, request: web.Request) -> web.Response | None:
+        """Return 401 response if auth fails when bound to all interfaces.
+
+        Returns ``None`` when auth succeeds or is not required.
+        """
+        if self._bind_host != _BIND_ALL_HOST or not self._token:
+            return None
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+        if not hmac.compare_digest(token, self._token):
+            return web.json_response(
+                {"success": False, "error": "Unauthorized"},
+                status=401,
+            )
+        return None
 
     @property
     def port(self) -> int:
@@ -120,6 +143,8 @@ class InternalAgentAPI:
         Expects JSON body: ``{"from": "agent_name", "to": "agent_name", "message": "..."}``
         Returns JSON: ``{"sender": "...", "text": "...", "success": true/false, "error": "..."}``
         """
+        if (denied := self._check_auth(request)) is not None:
+            return denied
         try:
             data = await request.json()
         except Exception:
@@ -154,6 +179,8 @@ class InternalAgentAPI:
         Expects JSON body: ``{"from": "agent_name", "to": "agent_name", "message": "..."}``
         Returns immediately: ``{"success": true/false, "task_id": "...", "error": "..."}``
         """
+        if (denied := self._check_auth(request)) is not None:
+            return denied
         try:
             data = await request.json()
         except Exception:
@@ -207,11 +234,15 @@ class InternalAgentAPI:
 
     async def _handle_list(self, request: web.Request) -> web.Response:
         """GET /interagent/agents — list all registered agents."""
+        if (denied := self._check_auth(request)) is not None:
+            return denied
         assert self._bus is not None  # Routes only registered when bus is set
         return web.json_response({"agents": self._bus.list_agents()})
 
     async def _handle_health(self, request: web.Request) -> web.Response:
         """GET /interagent/health — return live health for all agents."""
+        if (denied := self._check_auth(request)) is not None:
+            return denied
         if self._health_ref is None:
             return web.json_response({"agents": {}})
 
@@ -233,6 +264,8 @@ class InternalAgentAPI:
         Expects JSON: ``{"from": "agent", "prompt": "...", "name": "...",
         "provider": null, "model": null, "thinking": null}``
         """
+        if (denied := self._check_auth(request)) is not None:
+            return denied
         if self._task_hub is None:
             return web.json_response(
                 {"success": False, "error": "Task system not available"},
@@ -276,11 +309,15 @@ class InternalAgentAPI:
 
         return web.json_response({"success": True, "task_id": task_id})
 
-    async def _handle_task_resume(self, request: web.Request) -> web.Response:
+    async def _handle_task_resume(  # noqa: PLR0911
+        self, request: web.Request
+    ) -> web.Response:
         """POST /tasks/resume — resume a completed task with a follow-up.
 
         Expects JSON: ``{"task_id": "...", "prompt": "...", "from": "agent"}``
         """
+        if (denied := self._check_auth(request)) is not None:
+            return denied
         if self._task_hub is None:
             return web.json_response(
                 {"success": False, "error": "Task system not available"},
@@ -326,6 +363,8 @@ class InternalAgentAPI:
         Expects JSON: ``{"task_id": "...", "question": "..."}``
         Returns immediately. The parent agent will resume the task with the answer.
         """
+        if (denied := self._check_auth(request)) is not None:
+            return denied
         if self._task_hub is None:
             return web.json_response(
                 {"success": False, "error": "Task system not available"},
@@ -360,6 +399,8 @@ class InternalAgentAPI:
 
     async def _handle_task_list(self, request: web.Request) -> web.Response:
         """GET /tasks/list — list tasks, filtered by parent_agent if provided."""
+        if (denied := self._check_auth(request)) is not None:
+            return denied
         if self._task_hub is None:
             return web.json_response({"tasks": []})
 
@@ -373,6 +414,8 @@ class InternalAgentAPI:
 
     async def _handle_task_cancel(self, request: web.Request) -> web.Response:
         """POST /tasks/cancel — cancel a running task."""
+        if (denied := self._check_auth(request)) is not None:
+            return denied
         if self._task_hub is None:
             return web.json_response(
                 {"success": False, "error": "Task system not available"},
@@ -411,6 +454,8 @@ class InternalAgentAPI:
         self, request: web.Request
     ) -> web.Response:
         """POST /tasks/delete — permanently delete a finished task (entry + folder)."""
+        if (denied := self._check_auth(request)) is not None:
+            return denied
         if self._task_hub is None:
             return web.json_response(
                 {"success": False, "error": "Task system not available"},

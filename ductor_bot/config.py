@@ -168,6 +168,7 @@ class MatrixConfig(BaseModel):
     device_id: str = ""  # persisted after first login
     allowed_rooms: list[str] = Field(default_factory=list)  # ["!abc:server", "#room:server"]
     allowed_users: list[str] = Field(default_factory=list)  # ["@user:server"]
+    admin_users: list[str] = Field(default_factory=list)  # ["@admin:server"]
     store_path: str = "matrix_store"  # relative to ductor_home
 
 
@@ -313,6 +314,8 @@ class AgentConfig(BaseModel):
     telegram_token: str = ""
     allowed_user_ids: list[int] = Field(default_factory=list)
     allowed_group_ids: list[int] = Field(default_factory=list)
+    admin_ids: list[int] = Field(default_factory=list)
+    rate_limit_per_minute: int = 30
     matrix: MatrixConfig = Field(default_factory=MatrixConfig)
 
     @field_validator("gemini_api_key", mode="before")

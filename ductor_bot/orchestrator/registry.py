@@ -14,6 +14,9 @@ from ductor_bot.orchestrator.selectors.models import ButtonGrid
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from ductor_bot.auth.audit import AuditLog
+    from ductor_bot.auth.principal import Principal
+    from ductor_bot.auth.service import AuthorizationService
     from ductor_bot.orchestrator.core import Orchestrator
     from ductor_bot.session.key import SessionKey
 
@@ -40,17 +43,36 @@ class _CommandEntry:
     name: str
     handler: CommandHandler
     match_prefix: bool
+    required_capability: str | None
 
 
 class CommandRegistry:
     """Registry of slash commands with async dispatch."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        authz: AuthorizationService | None = None,
+        audit_log: AuditLog | None = None,
+    ) -> None:
         self._commands: list[_CommandEntry] = []
+        self._authz = authz
+        self._audit_log = audit_log
 
-    def register_async(self, name: str, handler: CommandHandler) -> None:
+    def register_async(
+        self,
+        name: str,
+        handler: CommandHandler,
+        *,
+        capability: str | None = None,
+    ) -> None:
         self._commands.append(
-            _CommandEntry(name=name, handler=handler, match_prefix=name.endswith(" "))
+            _CommandEntry(
+                name=name,
+                handler=handler,
+                match_prefix=name.endswith(" "),
+                required_capability=capability,
+            )
         )
 
     async def dispatch(
@@ -59,6 +81,8 @@ class CommandRegistry:
         orch: Orchestrator,
         key: SessionKey,
         text: str,
+        *,
+        principal: Principal | None = None,
     ) -> OrchestratorResult | None:
         """Dispatch *cmd* to a registered handler. Returns None if unknown.
 
@@ -73,10 +97,36 @@ class CommandRegistry:
 
         for entry in self._commands:
             if entry.match_prefix:
-                if cmd.startswith(entry.name):
-                    logger.debug("Command matched cmd=%s", entry.name)
-                    return await entry.handler(orch, key, text)
-            elif cmd == entry.name:
-                logger.debug("Command matched cmd=%s", entry.name)
-                return await entry.handler(orch, key, text)
+                if not cmd.startswith(entry.name):
+                    continue
+            elif cmd != entry.name:
+                continue
+
+            logger.debug("Command matched cmd=%s", entry.name)
+
+            # Capability enforcement
+            if (
+                entry.required_capability
+                and self._authz is not None
+                and principal is not None
+                and not self._authz.check(principal, entry.required_capability)
+            ):
+                if self._audit_log:
+                    self._audit_log.log(
+                        principal=principal.principal_id,
+                        action="access_denied",
+                        target=entry.name,
+                        details={"capability": entry.required_capability},
+                        result="denied",
+                    )
+                return OrchestratorResult(text="This command requires admin access.")
+
+            if self._audit_log and principal is not None:
+                self._audit_log.log(
+                    principal=principal.principal_id,
+                    action="command_executed",
+                    target=entry.name,
+                )
+
+            return await entry.handler(orch, key, text)
         return None

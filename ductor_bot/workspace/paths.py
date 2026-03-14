@@ -68,6 +68,11 @@ class DuctorPaths:
         return self.ductor_home / "logs"
 
     @property
+    def audit_log_path(self) -> Path:
+        """Append-only JSONL audit log."""
+        return self.logs_dir / "audit.jsonl"
+
+    @property
     def cron_tasks_dir(self) -> Path:
         return self.workspace / "cron_tasks"
 
