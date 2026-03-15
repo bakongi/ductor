@@ -323,9 +323,15 @@ async def run_oneshot_subprocess(
 # ---------------------------------------------------------------------------
 
 
-def _win_stdin_pipe() -> int | None:
-    """Return ``asyncio.subprocess.PIPE`` on Windows, else ``None``."""
-    return asyncio.subprocess.PIPE if _IS_WINDOWS else None
+def _win_stdin_pipe() -> int:
+    """Return PIPE on Windows (prompt fed via stdin), DEVNULL on Linux.
+
+    On Linux the prompt is passed as a CLI argument, so stdin is unused.
+    Using DEVNULL prevents the child from inheriting a potentially broken
+    parent stdin (e.g. a deleted pty after the launching terminal closes),
+    which causes Claude CLI to exit silently with empty output.
+    """
+    return asyncio.subprocess.PIPE if _IS_WINDOWS else asyncio.subprocess.DEVNULL
 
 
 async def _cancel_drain(drain: asyncio.Task[bytes]) -> None:
