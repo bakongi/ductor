@@ -66,6 +66,71 @@ _SUSPICIOUS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"<file:[^>]+>", re.IGNORECASE),
         "file_tag_injection",
     ),
+    # -- Extended patterns (topsha integration) --
+    (
+        re.compile(
+            r"забудь\s+(все\s+)?(инструкции|правила|промпт)",
+            re.IGNORECASE,
+        ),
+        "instruction_override_ru",
+    ),
+    (
+        re.compile(r"\[(system|admin|developer)\]", re.IGNORECASE),
+        "fake_tag",
+    ),
+    (
+        re.compile(r"(developer|DAN)\s+mode", re.IGNORECASE),
+        "mode_bypass",
+    ),
+    (
+        re.compile(r"\bjailbreak\b", re.IGNORECASE),
+        "jailbreak",
+    ),
+    (
+        re.compile(r"pretend\s+(you\s+)?(are|to\s+be)", re.IGNORECASE),
+        "role_confusion",
+    ),
+    (
+        re.compile(r"act\s+as\s+(if|a|an)", re.IGNORECASE),
+        "role_override",
+    ),
+    (
+        re.compile(r"override\s+(your|all|previous)", re.IGNORECASE),
+        "override_attempt",
+    ),
+    (
+        re.compile(r"reset\s+(to|your)\s+(default|factory|original)", re.IGNORECASE),
+        "reset_attempt",
+    ),
+    (
+        re.compile(
+            r"(reveal|show)\s+(me\s+)?(your|the)\s+(system|prompt|instructions)",
+            re.IGNORECASE,
+        ),
+        "prompt_extraction",
+    ),
+    (
+        re.compile(r"bypass\s+(your|all|any)\s+(safety|security|filter)", re.IGNORECASE),
+        "safety_bypass",
+    ),
+    (
+        re.compile(
+            r"(декодируй|раскодируй|расшифруй).*(выполни|запусти|исполни)",
+            re.IGNORECASE,
+        ),
+        "base64_exec_ru",
+    ),
+    (
+        re.compile(r"(decode|decrypt).*(execute|run|eval)", re.IGNORECASE),
+        "base64_exec_en",
+    ),
+    (
+        re.compile(
+            r"aW1wb3J0IG9z|b3MuZW52aXJvbg|L3Byb2Mvc2VsZi9lbnZpcm9u|L3J1bi9zZWNyZXRz",
+            re.IGNORECASE,
+        ),
+        "base64_literal",
+    ),
 ]
 
 _FULLWIDTH_RE = re.compile(r"[\uFF21-\uFF3A\uFF41-\uFF5A\uFF1C\uFF1E]")

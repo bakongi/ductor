@@ -445,3 +445,9 @@ changelog_header = "**Changelog v{version}**"
 
 [multiagent]
 async_task_received = "📥 **Async-Aufgabe empfangen** von `{sender}`\nSession: `{session}` · Task-ID: `{task_id}`\n\n_{preview}_"
+
+# -- Sicherheit ---------------------------------------------------------------
+
+[security]
+injection_blocked = "Nachricht blockiert: Verdächtige Muster erkannt ({patterns}). Falls dies ein Fehlalarm ist, bitte umformulieren."
+injection_warning = "_⚠️ Verdächtige Muster erkannt: {patterns}_"

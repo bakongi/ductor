@@ -71,6 +71,7 @@ class MessageBus:
         self._injector: SessionInjector | None = None
         self._pre_deliver: Callable[[Envelope], Awaitable[None]] | None = None
         self._audit: Callable[[Envelope], Awaitable[None]] | None = None
+        self._sanitize_output: bool = False
 
     @property
     def lock_pool(self) -> LockPool:
@@ -92,6 +93,10 @@ class MessageBus:
         or pre-delivery notifications.
         """
         self._pre_deliver = hook
+
+    def set_sanitize_output(self, enabled: bool) -> None:
+        """Enable or disable output sanitization for bus-delivered messages."""
+        self._sanitize_output = enabled
 
     def set_audit_hook(self, hook: Callable[[Envelope], Awaitable[None]]) -> None:
         """Optional audit hook called for every submitted envelope."""
@@ -146,6 +151,11 @@ class MessageBus:
                 envelope.is_error = True
                 if not envelope.result_text:
                     envelope.result_text = f"Error processing {envelope.origin.value} result"
+
+        if self._sanitize_output and envelope.result_text:
+            from ductor_bot.security import sanitize_output
+
+            envelope.result_text = sanitize_output(envelope.result_text)
 
         if self._pre_deliver:
             await self._pre_deliver(envelope)

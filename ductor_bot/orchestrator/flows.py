@@ -368,7 +368,11 @@ async def normal(
         logger.info("Normal flow completed")
         req_model, _prov = _request_target(orch, request)
         result = _finish_normal(
-            response, session, orch._config.session_age_warning_hours, model_name=req_model
+            response,
+            session,
+            orch._config.session_age_warning_hours,
+            model_name=req_model,
+            sanitize_output=orch._config.security.sanitize_output,
         )
         if session_recovered:
             result.text = f"{_session_recovered_msg()}\n\n{result.text}"
@@ -435,7 +439,11 @@ async def normal_streaming(
         logger.info("Streaming flow completed")
         req_model, _prov = _request_target(orch, request)
         return _finish_normal(
-            response, session, orch._config.session_age_warning_hours, model_name=req_model
+            response,
+            session,
+            orch._config.session_age_warning_hours,
+            model_name=req_model,
+            sanitize_output=orch._config.security.sanitize_output,
         )
     finally:
         orch._inflight_tracker.complete(key.chat_id)
@@ -465,6 +473,7 @@ def _finish_normal(
     warning_hours: int = 0,
     *,
     model_name: str = "",
+    sanitize_output: bool = True,
 ) -> OrchestratorResult:
     """Post-processing for normal() and normal_streaming()."""
     if response.is_error:
@@ -475,6 +484,10 @@ def _finish_normal(
         return OrchestratorResult(text=t("error.check_logs"))
 
     text = response.result
+    if sanitize_output:
+        from ductor_bot.security import sanitize_output as _sanitize
+
+        text = _sanitize(text)
     if session:
         text += _session_age_note(session, warning_hours)
 

@@ -445,3 +445,9 @@ changelog_header = "**Changelog v{version}**"
 
 [multiagent]
 async_task_received = "📥 **Tarefa assíncrona recebida** de `{sender}`\nSessão: `{session}` · ID da tarefa: `{task_id}`\n\n_{preview}_"
+
+# -- Segurança ----------------------------------------------------------------
+
+[security]
+injection_blocked = "Mensagem bloqueada: padrões suspeitos detectados ({patterns}). Se for um falso positivo, reformule sua mensagem."
+injection_warning = "_⚠️ Padrões suspeitos detectados: {patterns}_"

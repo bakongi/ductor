@@ -28,6 +28,7 @@ from ductor_bot.errors import (
     WebhookError,
     WorkspaceError,
 )
+from ductor_bot.i18n import t
 from ductor_bot.infra.docker import DockerManager
 from ductor_bot.infra.inflight import InflightTracker
 from ductor_bot.log_context import ctx_principal_id
@@ -327,6 +328,26 @@ class Orchestrator:
         patterns = detect_suspicious_patterns(dispatch.text)
         if patterns:
             logger.warning("Suspicious input patterns: %s", ", ".join(patterns))
+            action = self._config.security.injection_action
+            if action == "block":
+                self._audit_log.log(
+                    principal=dispatch.principal_id,
+                    action="injection_blocked",
+                    target=dispatch.cmd[:80],
+                    details={"patterns": patterns},
+                    result="blocked",
+                )
+                return OrchestratorResult(
+                    text=t("security.injection_blocked", patterns=", ".join(patterns)),
+                )
+            if action == "warn":
+                self._audit_log.log(
+                    principal=dispatch.principal_id,
+                    action="injection_warned",
+                    target=dispatch.cmd[:80],
+                    details={"patterns": patterns},
+                    result="warned",
+                )
 
         try:
             return await self._route_message(dispatch)
@@ -488,6 +509,7 @@ class Orchestrator:
         """Wire all observer result callbacks to the message bus."""
         self._observers.wire_to_bus(bus, wake_handler=wake_handler)
         bus.set_injector(self)
+        bus.set_sanitize_output(self._config.security.sanitize_output)
 
     async def handle_heartbeat(
         self,

@@ -140,6 +140,11 @@
         "quality": 85
     },
 
+    "security": {
+        "injection_action": "warn",
+        "sanitize_output": true
+    },
+
     "scene": {
         "seen_reaction": false,
         "technical_footer": false

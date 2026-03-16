@@ -445,3 +445,9 @@ changelog_header = "**Changelog v{version}**"
 
 [multiagent]
 async_task_received = "📥 **Async-задача получена** от `{sender}`\nСессия: `{session}` · Task ID: `{task_id}`\n\n_{preview}_"
+
+# -- Безопасность -------------------------------------------------------------
+
+[security]
+injection_blocked = "Сообщение заблокировано: обнаружены подозрительные паттерны ({patterns}). Если это ложное срабатывание, перефразируй запрос."
+injection_warning = "_⚠️ Обнаружены подозрительные паттерны: {patterns}_"

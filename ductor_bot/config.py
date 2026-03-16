@@ -203,6 +203,13 @@ class WebhookConfig(BaseModel):
     rate_limit_per_minute: int = 30
 
 
+class SecurityConfig(BaseModel):
+    """Settings for input injection defense and output sanitization."""
+
+    injection_action: str = "warn"  # "log" | "warn" | "block"
+    sanitize_output: bool = True
+
+
 class SceneConfig(BaseModel):
     """Settings for scene indicators and technical footer."""
 
@@ -303,6 +310,7 @@ class AgentConfig(BaseModel):
     image: ImageConfig = Field(default_factory=ImageConfig)
     timeouts: TimeoutConfig = Field(default_factory=TimeoutConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
     scene: SceneConfig = Field(default_factory=SceneConfig)
     user_timezone: str = ""
     language: str = "en"
