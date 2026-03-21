@@ -122,6 +122,10 @@ class GeminiCLI(BaseCLI):
         if system_prompt_path:
             env["GEMINI_SYSTEM_MD"] = system_prompt_path
         self._inject_config_gemini_api_key(env)
+        if self._config.chat_id:
+            env["DUCTOR_CHAT_ID"] = str(self._config.chat_id)
+        if self._config.topic_id:
+            env["DUCTOR_TOPIC_ID"] = str(self._config.topic_id)
         return env
 
     def _inject_config_gemini_api_key(self, env: dict[str, str]) -> None:
