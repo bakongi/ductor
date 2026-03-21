@@ -9,7 +9,8 @@ Use this directory for user-facing final deliverables.
 
 ## Rules
 
-1. Save final files in `output_to_user/`.
+1. Save final files in `output_to_user/` (relative to your cwd, which is already `workspace/`).
+   **Never** use `workspace/output_to_user/` — that creates a nested duplicate.
 2. Use descriptive filenames.
 3. Send with `<file:/absolute/path/to/output_to_user/...>`.
 4. Keep temporary/intermediate build files elsewhere.

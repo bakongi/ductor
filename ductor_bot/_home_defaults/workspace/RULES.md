@@ -76,6 +76,17 @@ touch ~/.ductor/restart-requested
 The bot detects this marker within seconds and performs a clean restart.
 Always tell the user you triggered a restart.
 
+## Path Discipline
+
+Your working directory is `~/.ductor/workspace/`. All relative paths resolve from here.
+
+- **NEVER create `workspace/` subdirectories** inside the workspace. You are already inside workspace.
+- Use `output_to_user/` — NOT `workspace/output_to_user/`.
+- Use `tools/` — NOT `workspace/tools/`.
+- Use `memory_system/` — NOT `workspace/memory_system/`.
+- Use `cron_tasks/` — NOT `workspace/cron_tasks/`.
+- If a path would create a nested duplicate of an existing directory, you are using the wrong base.
+
 ## Safety Boundaries
 
 - Ask for confirmation before destructive actions.
