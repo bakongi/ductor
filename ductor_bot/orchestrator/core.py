@@ -461,10 +461,12 @@ class Orchestrator:
     async def reset_active_provider_session(self, key: SessionKey) -> str:
         """Reset only the active provider session bucket for a given key."""
         active = await self._sessions.get_active(key)
-        if active is not None:
+        if active is not None and key.topic_id is not None:
+            # Topic sessions keep their own model on reset
             provider = active.provider
             model = active.model
         else:
+            # Main chat resets always use the config default model
             model, provider = self.resolve_runtime_target(self._config.model)
 
         await self._sessions.reset_provider_session(
