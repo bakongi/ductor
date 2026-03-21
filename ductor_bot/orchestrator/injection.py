@@ -153,6 +153,7 @@ async def handle_interagent_message(
     message: str,
     *,
     new_session: bool = False,
+    originating_chat_id: int = 0,
 ) -> tuple[str, str, str]:
     """Process a message from another agent via the InterAgentBus.
 
@@ -166,6 +167,7 @@ async def handle_interagent_message(
     """
     own_name = orch._cli_service._config.agent_name
     chat_id = _interagent_chat_id(orch)
+    request_chat_id = originating_chat_id or chat_id
     ns, _is_new, provider_switch_notice = _get_or_create_interagent_session(
         orch,
         sender,
@@ -183,7 +185,7 @@ async def handle_interagent_message(
     ns.status = "running"
     request = AgentRequest(
         prompt=prompt,
-        chat_id=chat_id,
+        chat_id=request_chat_id,
         process_label=f"interagent:{sender}",
         resume_session=ns.session_id or None,
         timeout_seconds=orch._config.cli_timeout,

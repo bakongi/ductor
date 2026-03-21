@@ -157,6 +157,7 @@ class InternalAgentAPI:
         recipient = data.get("to", "")
         message = data.get("message", "")
         new_session = bool(data.get("new_session", False))
+        originating_chat_id = int(data["chat_id"]) if data.get("chat_id") else 0
 
         if not recipient or not message:
             return web.json_response(
@@ -170,6 +171,7 @@ class InternalAgentAPI:
             recipient=recipient,
             message=message,
             new_session=new_session,
+            originating_chat_id=originating_chat_id,
         )
         return web.json_response(asdict(result))
 

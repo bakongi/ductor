@@ -134,6 +134,7 @@ class InterAgentBus:
         *,
         send_timeout: float = _DEFAULT_TIMEOUT,
         new_session: bool = False,
+        originating_chat_id: int = 0,
     ) -> InterAgentResponse:
         """Send a message to another agent and wait for the response.
 
@@ -174,6 +175,7 @@ class InterAgentBus:
                     sender,
                     message,
                     new_session=new_session,
+                    originating_chat_id=originating_chat_id,
                 ),
                 timeout=send_timeout,
             )
@@ -298,6 +300,7 @@ class InterAgentBus:
                     task.sender,
                     task.message,
                     new_session=task.new_session,
+                    originating_chat_id=task.chat_id,
                 ),
                 timeout=_ASYNC_TIMEOUT,
             )

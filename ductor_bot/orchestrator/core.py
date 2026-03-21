@@ -722,13 +722,20 @@ class Orchestrator:
         message: str,
         *,
         new_session: bool = False,
+        originating_chat_id: int = 0,
     ) -> tuple[str, str, str]:
         """Process a message from another agent via the InterAgentBus."""
         from ductor_bot.orchestrator.injection import (
             handle_interagent_message as _handle_ia,
         )
 
-        return await _handle_ia(self, sender, message, new_session=new_session)
+        return await _handle_ia(
+            self,
+            sender,
+            message,
+            new_session=new_session,
+            originating_chat_id=originating_chat_id,
+        )
 
     async def handle_async_interagent_result(
         self,
