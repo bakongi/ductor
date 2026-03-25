@@ -270,17 +270,16 @@ class CLIService:
         if was_aborted:
             return AgentResponse(result="")
 
-        if accumulated_text and not stream_error:
+        if accumulated_text:
             logger.info(
-                "Stream completed without ResultEvent, using %d chars",
+                "Stream fallback using %d accumulated chars (error=%s)",
                 len(accumulated_text),
+                stream_error,
             )
             return AgentResponse(result=accumulated_text, session_id=init_session_id)
 
         logger.warning(
-            "Streaming failed error=%s accumulated=%d chars, retrying non-streaming",
-            stream_error,
-            len(accumulated_text),
+            "Streaming failed with no accumulated text, retrying non-streaming",
         )
         resp = await self.execute(request)
         return AgentResponse(

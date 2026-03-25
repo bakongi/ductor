@@ -162,7 +162,7 @@ async def run_streaming_message(
         editor.has_content,
     )
 
-    if result.stream_fallback or not editor.has_content:
+    if not editor.has_content:
         await send_rich(
             dispatch.bot,
             dispatch.key.chat_id,
