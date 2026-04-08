@@ -48,6 +48,7 @@ class TaskEntry:
     thinking: str = ""
     tasks_dir: str = ""  # Agent's tasks directory (for per-agent folder resolution)
     thread_id: int | None = None  # Forum topic ID (for routing results back to topic)
+    pid: int = 0  # CLI subprocess PID (for diagnostics while running)
 
     def to_dict(self) -> dict[str, object]:
         d: dict[str, object] = {
@@ -70,6 +71,7 @@ class TaskEntry:
             "last_question": self.last_question,
             "thinking": self.thinking,
             "tasks_dir": self.tasks_dir,
+            "pid": self.pid,
         }
         if self.thread_id is not None:
             d["thread_id"] = self.thread_id
@@ -98,6 +100,7 @@ class TaskEntry:
             thinking=d.get("thinking", ""),
             tasks_dir=d.get("tasks_dir", ""),
             thread_id=d.get("thread_id"),
+            pid=d.get("pid", 0),
         )
 
 

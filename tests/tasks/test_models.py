@@ -57,6 +57,28 @@ class TestTaskEntry:
         d = entry.to_dict()
         assert "original_prompt" not in d
 
+    def test_pid_roundtrip(self) -> None:
+        entry = TaskEntry(
+            task_id="p1",
+            chat_id=1,
+            parent_agent="main",
+            name="pid-test",
+            prompt_preview="test",
+            provider="gemini",
+            model="flash",
+            status="running",
+            pid=12345,
+        )
+        d = entry.to_dict()
+        assert d["pid"] == 12345
+        restored = TaskEntry.from_dict(d)
+        assert restored.pid == 12345
+
+    def test_pid_default_zero(self) -> None:
+        d = {"task_id": "p2", "chat_id": 1}
+        entry = TaskEntry.from_dict(d)
+        assert entry.pid == 0
+
     def test_thread_id_roundtrip(self) -> None:
         entry = TaskEntry(
             task_id="t1",

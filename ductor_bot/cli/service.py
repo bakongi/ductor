@@ -293,6 +293,7 @@ class CLIService:
             timed_out=resp.timed_out,
             duration_ms=resp.duration_ms,
             stream_fallback=True,
+            stderr=resp.stderr,
         )
 
     def resolve_provider(self, request: AgentRequest) -> tuple[str, str]:
@@ -339,6 +340,12 @@ class CLIService:
             response.total_tokens,
             elapsed_ms,
         )
+        if response.is_error and response.stderr:
+            logger.warning(
+                "CLI %s stderr: %.500s",
+                request.process_label,
+                response.stderr,
+            )
 
 
 def _cli_response_to_agent_response(
@@ -359,4 +366,5 @@ def _cli_response_to_agent_response(
         timed_out=resp.timed_out,
         duration_ms=resp.duration_ms,
         stream_fallback=stream_fallback,
+        stderr=resp.stderr,
     )

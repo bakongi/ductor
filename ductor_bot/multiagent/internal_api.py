@@ -75,6 +75,7 @@ class InternalAgentAPI:
         self._app.router.add_get("/tasks/list", self._handle_task_list)
         self._app.router.add_post("/tasks/cancel", self._handle_task_cancel)
         self._app.router.add_post("/tasks/delete", self._handle_task_delete)
+        self._app.router.add_get("/tasks/check", self._handle_task_check)
 
         self._runner: web.AppRunner | None = None
 
@@ -498,3 +499,29 @@ class InternalAgentAPI:
                 status=409,
             )
         return web.json_response({"success": True})
+
+    async def _handle_task_check(self, request: web.Request) -> web.Response:
+        """GET /tasks/check?task_id=xxx — check health of a running task's process."""
+        if (denied := self._check_auth(request)) is not None:
+            return denied
+        if self._task_hub is None:
+            return web.json_response(
+                {"error": "Task system not available"}, status=503
+            )
+
+        task_id = request.query.get("task_id", "")
+        if not task_id:
+            return web.json_response(
+                {"error": "Missing 'task_id' query parameter"}, status=400
+            )
+
+        entry = self._task_hub.registry.get(task_id)
+        if entry is None:
+            return web.json_response(
+                {"error": f"Task '{task_id}' not found"}, status=404
+            )
+
+        from ductor_bot.tasks.process_health import check_process_health
+
+        health = await check_process_health(entry)
+        return web.json_response(health)

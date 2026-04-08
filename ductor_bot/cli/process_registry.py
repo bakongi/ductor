@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ductor_bot.infra.process_tree import (
@@ -30,6 +31,10 @@ class TrackedProcess:
     registered_at: float = field(default_factory=time.time)
 
 
+RegisterCallback = Callable[[int, str, int], None]
+# RegisterCallback(chat_id, label, pid) -> None
+
+
 class ProcessRegistry:
     """Global registry of active CLI subprocesses, keyed by *chat_id*."""
 
@@ -38,6 +43,11 @@ class ProcessRegistry:
         self._aborted: set[int] = set()
         self._aborted_labels: set[tuple[int, str]] = set()
         self._interrupted: set[int] = set()
+        self._on_register: RegisterCallback | None = None
+
+    def set_on_register(self, callback: RegisterCallback | None) -> None:
+        """Set a callback invoked each time a process is registered."""
+        self._on_register = callback
 
     def register(
         self,
@@ -61,6 +71,11 @@ class ProcessRegistry:
             label,
             process.pid,
         )
+        if self._on_register is not None and process.pid is not None:
+            try:
+                self._on_register(chat_id, label, process.pid)
+            except Exception:
+                logger.debug("on_register callback failed for label=%s", label)
         return tracked
 
     def unregister(self, tracked: TrackedProcess) -> None:

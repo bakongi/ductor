@@ -184,3 +184,45 @@ async def test_kill_stale_handles_already_exited() -> None:
 
     killed = await reg.kill_stale(max_age_seconds=60)
     assert killed == 0
+
+
+class TestOnRegisterCallback:
+    def test_callback_fires_on_register(self) -> None:
+        reg = ProcessRegistry()
+        calls: list[tuple[int, str, int]] = []
+        reg.set_on_register(lambda chat_id, label, pid: calls.append((chat_id, label, pid)))
+
+        proc = _mock_process(pid=100)
+        reg.register(chat_id=5, process=proc, label="task:abc123")
+
+        assert len(calls) == 1
+        assert calls[0] == (5, "task:abc123", 100)
+
+    def test_callback_not_called_when_none(self) -> None:
+        reg = ProcessRegistry()
+        reg.set_on_register(None)
+        proc = _mock_process(pid=101)
+        reg.register(chat_id=5, process=proc, label="main")
+        # No error
+
+    def test_callback_not_called_for_none_pid(self) -> None:
+        reg = ProcessRegistry()
+        calls: list[tuple[int, str, int]] = []
+        reg.set_on_register(lambda chat_id, label, pid: calls.append((chat_id, label, pid)))
+
+        proc = _mock_process(pid=None)
+        reg.register(chat_id=5, process=proc, label="task:xyz")
+
+        assert len(calls) == 0
+
+    def test_callback_exception_is_swallowed(self) -> None:
+        reg = ProcessRegistry()
+
+        def bad_callback(chat_id: int, label: str, pid: int) -> None:
+            raise RuntimeError("boom")
+
+        reg.set_on_register(bad_callback)
+        proc = _mock_process(pid=102)
+        # Should not raise
+        tracked = reg.register(chat_id=5, process=proc, label="task:test")
+        assert tracked.label == "task:test"

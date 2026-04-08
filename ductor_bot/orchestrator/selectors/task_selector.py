@@ -60,6 +60,10 @@ async def handle_task_callback(
         )
         return _build_page(hub, chat_id, note=note)
 
+    if action.startswith("check:"):
+        task_id = action[6:]
+        return await _check_task(hub, chat_id, task_id)
+
     if action == "cleanup":
         count = hub.registry.cleanup_finished(chat_id)
         note = (
@@ -123,6 +127,10 @@ def _append_running(
         lines.append(_format_entry(entry, now))
         rows.append(
             [
+                Button(
+                    text=t("tasks.btn_check", name=entry.name[:20]),
+                    callback_data=f"tsc:check:{entry.task_id}",
+                ),
                 Button(
                     text=t("tasks.btn_cancel", name=entry.name[:20]),
                     callback_data=f"tsc:cancel:{entry.task_id}",
@@ -210,6 +218,79 @@ def _format_entry(entry: TaskEntry, now: float) -> str:
     if entry.error:
         parts.append(entry.error[:80])
     return " · ".join(parts)
+
+
+async def _check_task(
+    hub: TaskHub,
+    chat_id: int,
+    task_id: str,
+) -> SelectorResponse:
+    """Run process health check and return a formatted report."""
+    from ductor_bot.tasks.process_health import check_process_health
+
+    entry = hub.registry.get(task_id)
+    if entry is None:
+        return _build_page(hub, chat_id, note=t("tasks.task_not_found", id=task_id))
+
+    health = await check_process_health(entry)
+
+    lines: list[str] = [f"**{health.get('name', task_id)}** `{task_id}`"]
+    lines.append(f"Status: {health.get('status', '?')} | {health.get('provider', '')}/{health.get('model', '')}")
+
+    process = health.get("process", "unknown")
+    pid = health.get("pid", 0)
+    if process == "alive":
+        running_secs = health.get("running_seconds", 0)
+        mins, secs = divmod(running_secs, 60)
+        lines.append(f"Process: alive (PID {pid}, {mins}m {secs}s)")
+
+        state = health.get("state", "")
+        mem_kb = health.get("memory_kb", 0)
+        threads = health.get("threads", "?")
+        if state:
+            lines.append(f"State: {state} | RAM: {mem_kb // 1024} MB | Threads: {threads}")
+
+        io_info = health.get("io_activity")
+        if io_info:
+            active = io_info.get("active", False)
+            read_rate = io_info.get("read_bytes_per_sec", 0)
+            write_rate = io_info.get("write_bytes_per_sec", 0)
+            label = "ACTIVE" if active else "IDLE"
+            lines.append(f"I/O: {label} (R: {_human_rate(read_rate)}, W: {_human_rate(write_rate)})")
+
+        net = health.get("network")
+        if net:
+            lines.append(f"Network: {net.get('established_connections', 0)} connection(s)")
+
+        tm_ago = health.get("taskmemory_updated_ago_seconds")
+        if tm_ago is not None:
+            lines.append(f"TASKMEMORY: updated {format_age(tm_ago)} ago")
+    elif process == "dead":
+        lines.append(f"Process: DEAD (PID {pid} no longer exists)")
+    else:
+        detail = health.get("detail", "PID not available")
+        lines.append(f"Process: {detail}")
+
+    rows = [
+        [
+            Button(text=t("tasks.btn_refresh"), callback_data="tsc:r"),
+            Button(
+                text=t("tasks.btn_cancel", name=entry.name[:20]),
+                callback_data=f"tsc:cancel:{task_id}",
+            ),
+        ],
+    ]
+    text = fmt(t("tasks.header"), SEP, "\n".join(lines))
+    return SelectorResponse(text=text, buttons=ButtonGrid(rows=rows))
+
+
+def _human_rate(bps: int) -> str:
+    """Format bytes/sec as human-readable."""
+    if bps >= 1024 * 1024:
+        return f"{bps / 1024 / 1024:.1f} MB/s"
+    if bps >= 1024:
+        return f"{bps / 1024:.1f} KB/s"
+    return f"{bps} B/s"
 
 
 def _status_icon(status: str) -> str:

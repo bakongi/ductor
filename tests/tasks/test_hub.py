@@ -543,6 +543,51 @@ class TestPerAgentTasksDir:
         await hub.shutdown()
 
 
+class TestPidCapture:
+    async def test_pid_captured_via_callback(self, registry: TaskRegistry, tmp_path: Path) -> None:
+        """PID should be written to registry when ProcessRegistry callback fires."""
+        from ductor_bot.cli.process_registry import ProcessRegistry
+
+        proc_registry = ProcessRegistry()
+        cli = _make_cli_service()
+        cli._process_registry = proc_registry
+
+        hub = TaskHub(
+            registry,
+            MagicMock(workspace=tmp_path),
+            cli_service=MagicMock(),
+            config=_make_config(),
+        )
+        hub.set_cli_service("main", cli)
+        hub.set_result_handler("main", AsyncMock())
+
+        # Simulate what ProcessRegistry does when a task process registers
+        entry = registry.create(_submit(), "gemini", "flash")
+        proc_registry._on_register(42, f"task:{entry.task_id}", 9999)
+
+        updated = registry.get(entry.task_id)
+        assert updated is not None
+        assert updated.pid == 9999
+
+    async def test_pid_cleared_on_completion(self, registry: TaskRegistry, tmp_path: Path) -> None:
+        """PID should be reset to 0 when task completes."""
+        hub = TaskHub(
+            registry,
+            MagicMock(workspace=tmp_path),
+            cli_service=_make_cli_service(),
+            config=_make_config(),
+        )
+        hub.set_result_handler("main", AsyncMock())
+
+        task_id = hub.submit(_submit())
+        await asyncio.sleep(0.1)
+
+        entry = registry.get(task_id)
+        assert entry is not None
+        assert entry.status == "done"
+        assert entry.pid == 0
+
+
 class TestPerAgentCLI:
     async def test_uses_agent_specific_cli(self, registry: TaskRegistry, tmp_path: Path) -> None:
         """Tasks use the CLI service registered for their parent_agent."""

@@ -76,3 +76,4 @@ class AgentResponse:
     timed_out: bool = False
     duration_ms: float | None = None
     stream_fallback: bool = False
+    stderr: str = ""

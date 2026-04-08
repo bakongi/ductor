@@ -36,6 +36,16 @@ the conversation — give it everything it needs.
 python3 tools/task_tools/list_tasks.py
 ```
 
+## Checking task health
+
+```bash
+python3 tools/task_tools/check_task.py TASK_ID
+```
+
+Shows whether the task's process is alive, its CPU/memory/I/O activity,
+network connections, and TASKMEMORY.md freshness. Useful to verify a
+long-running task is actually making progress.
+
 ## Cancelling a task
 
 ```bash

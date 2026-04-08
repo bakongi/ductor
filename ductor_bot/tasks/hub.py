@@ -83,6 +83,23 @@ class TaskHub:
         self._question_handlers: dict[str, QuestionHandler] = {}
         self._agent_chat_ids: dict[str, int] = {}
         self._maintenance_task: asyncio.Task[None] | None = None
+        self._pid_callback_installed: set[int] = set()
+
+    def _install_pid_callback(self, cli: CLIService) -> None:
+        """Wire ProcessRegistry callback to capture task PIDs."""
+        reg = cli._process_registry  # noqa: SLF001
+        if reg is None or id(reg) in self._pid_callback_installed:
+            return
+        self._pid_callback_installed.add(id(reg))
+        reg.set_on_register(self._on_process_registered)
+
+    def _on_process_registered(self, chat_id: int, label: str, pid: int) -> None:
+        """Called by ProcessRegistry when a subprocess is registered."""
+        if not label.startswith("task:"):
+            return
+        task_id = label.removeprefix("task:")
+        self._registry.update_status(task_id, "running", pid=pid)
+        logger.debug("Task %s captured pid=%d", task_id, pid)
 
     def start_maintenance(self) -> None:
         """Start periodic orphan cleanup (call once after bot startup)."""
@@ -106,6 +123,7 @@ class TaskHub:
     def set_cli_service(self, agent_name: str, cli: CLIService) -> None:
         """Register a per-agent CLI service for task execution."""
         self._cli_services[agent_name] = cli
+        self._install_pid_callback(cli)
 
     def set_agent_paths(self, agent_name: str, paths: DuctorPaths) -> None:
         """Register per-agent paths for task folder isolation."""
@@ -404,7 +422,7 @@ class TaskHub:
                 error = f"Timeout after {timeout:.0f}s"
             elif response.is_error:
                 status = "failed"
-                error = response.result or "CLI error"
+                error = response.result or response.stderr or "CLI error"
             else:
                 # If the task asked a question during this run, mark as waiting
                 inflight = self._in_flight.get(entry.task_id)
@@ -423,6 +441,7 @@ class TaskHub:
                 error=error,
                 result_preview=(response.result or "")[:_RESULT_PREVIEW_LEN],
                 num_turns=total_turns,
+                pid=0,
             )
 
             result_text = response.result or ""

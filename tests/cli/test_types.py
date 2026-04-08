@@ -93,6 +93,7 @@ def test_agent_response_defaults() -> None:
     assert resp.input_tokens == 0
     assert resp.timed_out is False
     assert resp.stream_fallback is False
+    assert resp.stderr == ""
 
 
 def test_agent_response_is_frozen() -> None:
@@ -120,3 +121,9 @@ def test_agent_response_with_values() -> None:
     assert resp.total_tokens == 1500
     assert resp.input_tokens == 1000
     assert resp.stream_fallback is True
+
+
+def test_agent_response_stderr() -> None:
+    resp = AgentResponse(result="", is_error=True, stderr="connection refused")
+    assert resp.stderr == "connection refused"
+    assert resp.is_error is True

@@ -54,6 +54,50 @@ def _make_timeout_controller(orch: Orchestrator, kind: str) -> TimeoutController
     )
 
 
+_ISLAMIC_KEYWORDS_RU = frozenset({
+    "мазхаб", "ханафит", "шафиит", "маликит", "ханбалит",
+    "халяль", "харам", "хадис", "хадиса", "дозволен", "запрещен",
+    "фикх", "шариат", "намаз", "закят", "хадж", "никах", "талак",
+    "тафсир", "аят", "сура", "коран", "акида", "сунна",
+    "фетва", "масх", "тасмия", "забой", "мясо", "пост",
+})
+_ISLAMIC_KEYWORDS_AR = frozenset({
+    "حلال", "حرام", "حديث", "مذهب", "حنفي", "شافعي", "مالكي", "حنبلي",
+    "فقه", "شريعة", "صلاة", "زكاة", "حج", "نكاح", "طلاق",
+    "تفسير", "آية", "سورة", "قرآن", "عقيدة", "سنة", "فتوى",
+})
+_ISLAMIC_KEYWORDS_EN = frozenset({
+    "halal", "haram", "hadith", "madhab", "madhahib", "hanafi", "shafi",
+    "maliki", "hanbali", "fiqh", "sharia", "prayer", "zakat", "hajj",
+    "nikah", "talaq", "tafsir", "quran", "aqidah", "sunnah", "fatwa",
+    "permissible", "forbidden", "ruling",
+})
+
+
+def _islamic_topic_hint(text: str) -> str | None:
+    """Return a system-prompt hint if the user message looks like an Islamic question."""
+    lower = text.lower()
+    words = set(lower.split())
+    hit = (
+        words & _ISLAMIC_KEYWORDS_RU
+        or words & _ISLAMIC_KEYWORDS_AR
+        or words & _ISLAMIC_KEYWORDS_EN
+    )
+    if not hit:
+        return None
+    return (
+        "<islamic-skill-reminder>\n"
+        "This question is about an Islamic topic. Use the appropriate Islamic skill "
+        "(fiqh-scholar, hadith-scholar, tafsir-scholar, aqidah-scholar, usul-fiqh-scholar, "
+        "or sirah-scholar). Each skill requires:\n"
+        "1. Search the Shamela corpus via shamela_logged.py before composing the answer.\n"
+        "2. Cite only from tool output — no citations from training data.\n"
+        "3. Run validate_citations.py --audit --verify before delivering.\n"
+        "Skipping these steps produces hallucinated sources and broken links.\n"
+        "</islamic-skill-reminder>"
+    )
+
+
 async def _prepare_normal(
     orch: Orchestrator,
     key: SessionKey,
@@ -99,6 +143,11 @@ async def _prepare_normal(
         roster = _build_agent_roster(orch)
         if roster:
             append_prompt = f"{append_prompt}\n\n{roster}" if append_prompt else roster
+
+    # Inject Shamela skill reminder for Islamic questions
+    shamela_hint = _islamic_topic_hint(text)
+    if shamela_hint:
+        append_prompt = f"{append_prompt}\n\n{shamela_hint}" if append_prompt else shamela_hint
 
     hook_ctx = HookContext(
         chat_id=key.chat_id,

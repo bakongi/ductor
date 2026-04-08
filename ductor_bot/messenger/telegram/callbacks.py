@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import contextlib
 import html as html_mod
+import logging
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
@@ -53,14 +56,17 @@ async def edit_selector_response(
     resp: SelectorResponse,
 ) -> None:
     """Edit a message in-place with a ``SelectorResponse``."""
+    html = markdown_to_telegram_html(resp.text)
+    markup = button_grid_to_markup(resp.buttons)
     with contextlib.suppress(TelegramBadRequest):
         await bot.edit_message_text(
-            text=markdown_to_telegram_html(resp.text),
+            text=html,
             chat_id=chat_id,
             message_id=message_id,
-            reply_markup=button_grid_to_markup(resp.buttons),
+            reply_markup=markup,
             parse_mode=ParseMode.HTML,
         )
+
 
 
 # ---------------------------------------------------------------------------
